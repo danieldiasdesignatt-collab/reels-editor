@@ -2,7 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import ffmpegStatic from 'ffmpeg-static';
 import { spawn } from 'node:child_process';
-import { mkdir, writeFile, unlink } from 'node:fs/promises';
+import { mkdir, writeFile, unlink, readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,6 +17,10 @@ const app = express();
 const upload = multer({ dest: path.join(runtime, 'uploads'), limits: { fileSize: 1024 * 1024 * 1024 } });
 app.use(express.static(root));
 app.use('/renders', express.static(renders));
+
+app.get('/api/features', (_req, res) => res.json({
+  transcription: Boolean(process.env.OPENAI_API_KEY),
+}));
 
 const safe = value => String(value || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 60);
 app.post('/api/export', upload.single('video'), async (req, res) => {
@@ -36,5 +40,31 @@ app.post('/api/export', upload.single('video'), async (req, res) => {
     res.json({ url: `/renders/${path.basename(output)}`, log });
   } catch (error) { res.status(500).json({ error: error.message || 'Falha ao renderizar.' });
   } finally { await Promise.allSettled([unlink(req.file.path), unlink(ass)]); }
+});
+
+// A chave fica exclusivamente no ambiente do Render. O navegador só recebe
+// o texto e os tempos retornados pela API, nunca a credencial.
+app.post('/api/transcribe', upload.single('video'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Vídeo ausente.' });
+  if (!process.env.OPENAI_API_KEY) return res.status(503).json({ error: 'A transcrição automática ainda não foi configurada neste servidor.' });
+  if (req.file.size > 25 * 1024 * 1024) return res.status(413).json({ error: 'Para a transcrição, envie um trecho de até 25 MB.' });
+  try {
+    const bytes = await readFile(req.file.path);
+    const body = new FormData();
+    body.append('file', new Blob([bytes], { type: req.file.mimetype || 'video/mp4' }), req.file.originalname || 'video.mp4');
+    body.append('model', 'whisper-1');
+    body.append('language', 'pt');
+    body.append('response_format', 'verbose_json');
+    body.append('timestamp_granularities[]', 'word');
+    body.append('timestamp_granularities[]', 'segment');
+    const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST', headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` }, body,
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error?.message || 'Falha na transcrição.');
+    res.json({ text: result.text || '', words: result.words || [], segments: result.segments || [] });
+  } catch (error) {
+    res.status(502).json({ error: error.message || 'Falha ao transcrever o vídeo.' });
+  } finally { await Promise.allSettled([unlink(req.file.path)]); }
 });
 app.listen(Number(process.env.PORT || 4173), '0.0.0.0', () => console.log('Estúdio iniciado'));
