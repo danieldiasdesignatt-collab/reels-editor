@@ -1,56 +1,44 @@
 # Estúdio de Reels IA
 
-Aplicativo pessoal, local e em português para organizar projetos de edição de Reels com IA.
+Editor pessoal em português para transformar um vídeo em Reel vertical, publicado no Render.
 
-## Etapa 1 — projetos e identidade visual
+## O que funciona hoje
 
-Esta entrega permite:
+- Projetos independentes, com identidade visual, referências e preferências de edição.
+- Importação de vídeo pelo navegador sem alterar o arquivo original.
+- Corte por tempo, enquadramento vertical 9:16, ajuste de foco e modo com fundo.
+- Legendas manuais com estilo, cor e posição copiados da identidade do projeto no momento da criação do Reel.
+- Abertura com texto animado e zoom suave opcional. Os dois são mostrados na prévia e incluídos no MP4.
+- Exportação real em MP4 1080 × 1920, com FFmpeg, áudio e legendas embutidas.
+- Reprodução e download do resultado.
 
-- criar, selecionar, editar e excluir projetos independentes;
-- guardar nome, descrição, fontes, referências, paleta, logo, preferências e estilo de legendas;
-- visualizar uma prévia da identidade e de uma legenda;
-- persistir os dados no `localStorage` do navegador;
-- reservar uma área clara para os Reels que futuramente pertencerão a cada projeto.
+## Publicação
 
-## Etapa 2 — primeiro Reel exportável
+O app é servido por Node/Express e o processamento é feito pelo FFmpeg do servidor:
 
-Esta entrega adiciona:
+- URL: `https://reels-editor-daniel.onrender.com`
+- Hospedagem: Render (serviço web gratuito)
+- Código: `https://github.com/danieldiasdesignatt-collab/reels-editor`
 
-- importação de vídeo do computador para um Reel;
-- guarda do original no IndexedDB deste navegador, sem modificá-lo;
-- corte por início/fim, enquadramento vertical 9:16 e modo com fundo;
-- legendas manuais cronometradas;
-- interface e pipeline de exportação MP4 em 1080 × 1920 (bloqueados no ambiente atual; ver abaixo);
-- reprodução e download do MP4 final.
+## Limites conhecidos e próximos passos
 
-Cada Reel recebe uma cópia da paleta e do estilo de legenda do projeto quando é criado. Alterar o projeto depois não altera Reels existentes.
+Os projetos e vídeos enviados ainda são guardados no navegador (localStorage e IndexedDB). Isto preserva os dados no mesmo navegador, mas não sincroniza entre dispositivos. O MP4 gerado fica disponível no servidor enquanto a instância gratuita estiver ativa; não deve ser usado como arquivo permanente.
 
-## Bloqueio conhecido da exportação
+Para o produto ficar pessoal, privado e permanente, faltam:
 
-O FFmpeg WebAssembly usado pela primeira versão não consegue iniciar neste navegador: o worker remoto é bloqueado pela política de origem cruzada. Há um FFmpeg local no Mac capaz de fazer cortes e preservar áudio, mas ele foi compilado sem suporte a legendas embutidas. Portanto, a interface informa a falha e não produz arquivo simulado.
+1. Login e isolamento dos dados por usuário.
+2. Banco de dados para projetos, estilos, referências e decisões de edição.
+3. Armazenamento de objetos para originais, logos e MP4s (um disco persistente do Render ou S3/R2 equivalente).
+4. Fila de renderização para vídeos maiores.
+5. Transcrição automática e sugestões de edição por IA. Esta etapa requer configurar um provedor de IA no servidor e revisar os custos antes do primeiro uso pago.
 
-Antes de considerar a exportação concluída, é necessário instalar/fornecer uma distribuição local do FFmpeg com `libass` (filtro `subtitles`) e executar um servidor local para receber os arquivos. Essa mesma estrutura será necessária para a transcrição, mantendo credenciais fora do navegador.
+Não há transcrição automática, detecção semântica de melhores trechos nem geração de motion graphics por IA nesta versão. Esses recursos não são simulados.
 
-## Próximas etapas
-
-1. Transcrição automática, detecção de trechos e sugestões por IA.
-2. Linha do tempo, revisão de legendas e aprovação de versões.
-3. Mais formatos, filas de renderização e exportações em lote.
-
-## Recursos ainda não implementados
-
-- armazenamento em nuvem e logotipo como arquivo;
-- transcrição automática, IA, timeline e exportações em lote;
-- contas, sincronização entre dispositivos e colaboração.
-
-## Como executar localmente
-
-No diretório do projeto:
+## Desenvolvimento local
 
 ```bash
-python3 -m http.server 4173
+npm install
+npm start
 ```
 
-Depois acesse `http://localhost:4173`.
-
-> Os dados ficam somente neste navegador. Use o botão “Carregar exemplo” para conhecer a interface e “Limpar dados locais” para apagar a base de teste.
+O servidor usa `PORT` e, opcionalmente, `DATA_DIR`. Para renderizar, `ffmpeg-static` fornece um binário compatível quando não há `FFMPEG_PATH` configurado.
