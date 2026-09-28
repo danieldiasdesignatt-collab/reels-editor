@@ -61,7 +61,13 @@ app.post('/api/transcribe', upload.single('video'), async (req, res) => {
       method: 'POST', headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` }, body,
     });
     const result = await response.json();
-    if (!response.ok) throw new Error(result.error?.message || 'Falha na transcrição.');
+    if (!response.ok) {
+      const message = result.error?.message || 'Falha na transcrição.';
+      if (response.status === 429 && /credits|billing|quota/i.test(message)) {
+        return res.status(402).json({ error: 'A conta da API está sem créditos. Adicione créditos na cobrança da OpenAI e tente novamente.' });
+      }
+      return res.status(response.status >= 400 && response.status < 500 ? response.status : 502).json({ error: message });
+    }
     res.json({ text: result.text || '', words: result.words || [], segments: result.segments || [] });
   } catch (error) {
     res.status(502).json({ error: error.message || 'Falha ao transcrever o vídeo.' });
