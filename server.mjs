@@ -1,5 +1,6 @@
 import express from 'express';
 import multer from 'multer';
+import ffmpegStatic from 'ffmpeg-static';
 import { spawn } from 'node:child_process';
 import { mkdir, writeFile, unlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -9,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.dirname(fileURLToPath(import.meta.url));
 const runtime = process.env.DATA_DIR || path.join(root, 'work', 'runtime');
 const renders = path.join(runtime, 'renders');
-const ffmpeg = process.env.FFMPEG_PATH || (existsSync(path.join(root, 'work', 'tools', 'ffmpeg', 'ffmpeg')) ? path.join(root, 'work', 'tools', 'ffmpeg', 'ffmpeg') : 'ffmpeg');
+const ffmpeg = process.env.FFMPEG_PATH || ffmpegStatic || (existsSync(path.join(root, 'work', 'tools', 'ffmpeg', 'ffmpeg')) ? path.join(root, 'work', 'tools', 'ffmpeg', 'ffmpeg') : 'ffmpeg');
 await mkdir(renders, { recursive: true });
 await mkdir(path.join(runtime, 'uploads'), { recursive: true });
 const app = express();
