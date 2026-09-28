@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: reels-editor
+    runtime: docker
+    plan: starter
+    healthCheckPath: /
+    disk:
+      name: reels-media
+      mountPath: /var/data
+      sizeGB: 10
