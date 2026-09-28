@@ -25,3 +25,74 @@ const originalRender=render;render=()=>{originalRender();renderReelList()};rende
 
 async function exportServerReel(){const x=reel();if(!x)return;const button=r$('exportReel'),status=t=>r$('exportStatus').textContent=t;button.disabled=true;try{const file=await getMedia(x.mediaId);if(!file)throw new Error('Vídeo original não encontrado neste navegador.');let vf;if(x.fit==='crop'){const ar=x.width/x.height;let cw,ch;if(ar>9/16){ch=x.height;cw=Math.round(ch*9/16)}else{cw=x.width;ch=Math.round(cw*16/9)}const px=Math.round((x.width-cw)*x.focusX/100),py=Math.round((x.height-ch)*x.focusY/100);vf=`crop=${cw}:${ch}:${px}:${py},scale=1080:1920,subtitles=captions.ass`}else vf=`scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=${x.visual.background.replace('#','0x')},subtitles=captions.ass`;const form=new FormData();form.append('video',file,x.originalName);form.append('reelId',x.id);form.append('start',String(x.start));form.append('duration',String(x.end-x.start));form.append('filter',vf);form.append('ass',makeAss(x));status('Renderizando MP4 localmente com áudio e legendas…');const response=await fetch('/api/export',{method:'POST',body:form});const data=await response.json();if(!response.ok)throw new Error(data.error||'Falha no servidor de exportação.');if(outputUrl)URL.revokeObjectURL(outputUrl);outputUrl=data.url;r$('outputVideo').src=outputUrl;r$('downloadOutput').href=outputUrl;r$('downloadOutput').download=`${x.name||'reel'}.mp4`;r$('exportResult').classList.remove('hidden');r$('outputVideo').onloadedmetadata=()=>r$('outputMeta').textContent=`Exportado: ${r$('outputVideo').videoWidth} × ${r$('outputVideo').videoHeight} · ${r$('outputVideo').duration.toFixed(1)} s · áudio preservado.`;status('Exportação concluída. Assista ou baixe o MP4.')}catch(error){console.error(error);status(`Falha na exportação: ${error.message||'erro desconhecido'}. Tente novamente.`)}finally{button.disabled=false}}
 r$('exportReel').onclick=exportServerReel;
+
+// Camada criativa inicial: os efeitos ficam gravados no Reel, não no projeto.
+// Dessa forma, mudar a identidade visual depois não altera uma edição aprovada.
+function addCreativeControls(){
+  const panel=document.querySelector('.controls-panel');
+  if(!panel||r$('motionStyle'))return;
+  const motion=document.createElement('label');
+  motion.innerHTML='Movimento<select id="motionStyle"><option value="none">Sem movimento adicional</option><option value="gentle-zoom">Zoom suave e contínuo</option></select>';
+  const intro=document.createElement('label');
+  intro.innerHTML='Texto de abertura<input id="introText" maxlength="70" placeholder="Ex.: 3 ideias para melhorar hoje">';
+  panel.append(motion,intro);
+  r$('motionStyle').oninput=e=>{reel().motionStyle=e.target.value;persist();setPreviewFit(reel())};
+  r$('introText').oninput=e=>{reel().introText=e.target.value;persist();renderCaptionPreview()};
+}
+
+const previousRenderReelEditor=renderReelEditor;
+renderReelEditor=function(full=true){
+  const x=reel();
+  if(x){x.motionStyle=x.motionStyle||'none';x.introText=x.introText||'';}
+  previousRenderReelEditor(full);
+  addCreativeControls();
+  if(x&&r$('motionStyle')){r$('motionStyle').value=x.motionStyle;r$('introText').value=x.introText;}
+};
+
+const previousSetPreviewFit=setPreviewFit;
+setPreviewFit=function(x){
+  previousSetPreviewFit(x);
+  const stage=r$('videoStage');
+  stage.classList.toggle('gentle-zoom-preview',x.motionStyle==='gentle-zoom'&&x.fit==='crop');
+  let badge=stage.querySelector('.intro-preview');
+  if(!badge){badge=document.createElement('div');badge.className='intro-preview';stage.append(badge);}
+  badge.textContent=x.introText||'';
+  badge.classList.toggle('visible',Boolean(x.introText));
+};
+
+const creativeStyle=document.createElement('style');
+creativeStyle.textContent=`.video-stage.gentle-zoom-preview video{animation:reelGentleZoom 7s ease-in-out infinite alternate}@keyframes reelGentleZoom{from{transform:scale(1)}to{transform:scale(1.1)}}.intro-preview{display:none;position:absolute;top:9%;left:8%;right:8%;z-index:2;color:#fff;font:800 clamp(1.2rem,3.4vw,2.8rem)/1.05 Arial,sans-serif;text-align:center;text-transform:uppercase;text-shadow:0 3px 12px #000;pointer-events:none}.intro-preview.visible{display:block;animation:introFade 2.5s ease both}@keyframes introFade{0%{opacity:0;transform:scale(.9)}15%,76%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1.04)}}`;
+document.head.append(creativeStyle);
+
+const previousMakeAss=makeAss;
+makeAss=function(x){
+  const base=previousMakeAss(x);
+  const title=String(x.introText||'').trim().replace(/[{}\\]/g,'').replace(/\n/g,'\\N');
+  if(!title)return base;
+  return `${base}\nDialogue: 5,0:00:00.15,0:00:02.50,Default,,0,0,0,,{\\an5\\fs110\\bord5\\shad2\\fad(180,300)}${title}`;
+};
+
+function creativeVideoFilter(x){
+  let vf;
+  if(x.fit==='crop'){
+    const ar=x.width/x.height;let cw,ch;
+    if(ar>9/16){ch=x.height;cw=Math.round(ch*9/16)}else{cw=x.width;ch=Math.round(cw*16/9)}
+    const px=Math.round((x.width-cw)*x.focusX/100),py=Math.round((x.height-ch)*x.focusY/100);
+    vf=`crop=${cw}:${ch}:${px}:${py},scale=1080:1920`;
+    if(x.motionStyle==='gentle-zoom')vf+=`,scale=1188:2112,crop=1080:1920:mod(n*3\\,108):mod(n*2\\,192)`;
+  }else vf=`scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=${x.visual.background.replace('#','0x')}`;
+  return `${vf},setsar=1,subtitles=captions.ass`;
+}
+
+async function exportCreativeReel(){
+  const x=reel();if(!x)return;const button=r$('exportReel'),status=t=>r$('exportStatus').textContent=t;button.disabled=true;
+  try{
+    const file=await getMedia(x.mediaId);if(!file)throw new Error('Vídeo original não encontrado neste navegador.');
+    const form=new FormData();form.append('video',file,x.originalName);form.append('reelId',x.id);form.append('start',String(x.start));form.append('duration',String(x.end-x.start));form.append('filter',creativeVideoFilter(x));form.append('ass',makeAss(x));
+    status('Renderizando MP4 com áudio, legendas e movimento…');
+    const response=await fetch('/api/export',{method:'POST',body:form});const data=await response.json();if(!response.ok)throw new Error(data.error||'Falha no servidor de exportação.');
+    if(outputUrl)URL.revokeObjectURL(outputUrl);outputUrl=data.url;r$('outputVideo').src=outputUrl;r$('downloadOutput').href=outputUrl;r$('downloadOutput').download=`${x.name||'reel'}.mp4`;r$('exportResult').classList.remove('hidden');
+    r$('outputVideo').onloadedmetadata=()=>r$('outputMeta').textContent=`Exportado: ${r$('outputVideo').videoWidth} × ${r$('outputVideo').videoHeight} · ${r$('outputVideo').duration.toFixed(1)} s · áudio preservado.`;status('Exportação concluída. Assista ou baixe o MP4.');
+  }catch(error){console.error(error);status(`Falha na exportação: ${error.message||'erro desconhecido'}. Tente novamente.`)}finally{button.disabled=false;}
+}
+r$('exportReel').onclick=exportCreativeReel;
