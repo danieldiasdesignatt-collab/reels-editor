@@ -29,7 +29,9 @@ app.post('/api/export', upload.single('video'), async (req, res) => {
   try {
     await writeFile(ass, req.body.ass || '');
     const filter = String(req.body.filter || '').replaceAll('captions.ass', ass.replaceAll(':', '\\:'));
-    const args = ['-y', '-ss', String(Number(req.body.start) || 0), '-i', req.file.path, '-t', String(Math.max(.1, Number(req.body.duration) || 1)), '-vf', filter, '-map', '0:v:0', '-map', '0:a?', '-c:v', 'libx264', '-preset', 'medium', '-crf', '21', '-c:a', 'aac', '-movflags', '+faststart', '-shortest', output];
+    // O plano gratuito tem pouca memória. Um único encoder evita que um render
+    // vertical derrube a instância, mantendo a resolução final solicitada.
+    const args = ['-y', '-ss', String(Number(req.body.start) || 0), '-i', req.file.path, '-t', String(Math.max(.1, Number(req.body.duration) || 1)), '-vf', filter, '-map', '0:v:0', '-map', '0:a?', '-c:v', 'libx264', '-threads', '1', '-preset', 'ultrafast', '-crf', '23', '-c:a', 'aac', '-movflags', '+faststart', '-shortest', output];
     const log = await new Promise((resolve, reject) => { const p = spawn(ffmpeg, args); let stderr = ''; p.stderr.on('data', d => stderr += d); p.on('error', reject); p.on('close', code => code === 0 ? resolve(stderr) : reject(new Error(stderr.slice(-1600)))); });
     res.json({ url: `/renders/${path.basename(output)}`, log });
   } catch (error) { res.status(500).json({ error: error.message || 'Falha ao renderizar.' });
