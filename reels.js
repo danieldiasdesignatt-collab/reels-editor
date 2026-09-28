@@ -96,3 +96,29 @@ async function exportCreativeReel(){
   }catch(error){console.error(error);status(`Falha na exportação: ${error.message||'erro desconhecido'}. Tente novamente.`)}finally{button.disabled=false;}
 }
 r$('exportReel').onclick=exportCreativeReel;
+
+async function addTranscriptionControl(){
+  if(r$('transcribeReel'))return;
+  try{
+    const features=await fetch('/api/features').then(r=>r.json());
+    if(!features.transcription)return;
+    const panel=document.querySelector('.caption-list')?.closest('.panel');
+    if(!panel)return;
+    const button=document.createElement('button');button.id='transcribeReel';button.className='secondary-button';button.textContent='Gerar legendas automáticas';
+    panel.querySelector('.panel-title')?.append(button);
+    button.onclick=async()=>{
+      const x=reel(),status=t=>r$('exportStatus').textContent=t;button.disabled=true;
+      try{
+        const file=await getMedia(x.mediaId);if(!file)throw new Error('Vídeo original não encontrado neste navegador.');
+        status('Transcrevendo a fala em português…');
+        const form=new FormData();form.append('video',file,x.originalName);
+        const response=await fetch('/api/transcribe',{method:'POST',body:form});const data=await response.json();if(!response.ok)throw new Error(data.error||'Falha na transcrição.');
+        const segments=data.segments||[];
+        x.captions=segments.filter(s=>s.end>x.start&&s.start<x.end).map(s=>({id:crypto.randomUUID(),text:String(s.text||'').trim(),start:Math.max(x.start,s.start),end:Math.min(x.end,s.end)})).filter(c=>c.text);
+        x.transcript={text:data.text||'',words:data.words||[],segments,createdAt:new Date().toISOString()};persist('Transcrição e legendas automáticas salvas');renderReelEditor();status(`${x.captions.length} legenda(s) gerada(s). Você pode revisar cada texto e tempo.`);
+      }catch(error){status(`Falha na transcrição: ${error.message||'erro desconhecido'}.`)}finally{button.disabled=false;}
+    };
+  }catch(_error){/* A edição manual continua disponível sem o serviço de IA. */}
+}
+const previousOpenReel=openReel;
+openReel=async function(id){await previousOpenReel(id);await addTranscriptionControl();};
